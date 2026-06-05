@@ -1,6 +1,12 @@
 "use client";
 
-import type { Task } from "../lib/types";
+import type { Priority, Task } from "../lib/types";
+
+const PRIORITY_COLOR: Record<Priority, string> = {
+  high: "bg-red-400",
+  medium: "bg-amber-400",
+  low: "bg-(--color-muted)",
+};
 
 interface Props {
   tasks: Task[];
@@ -25,6 +31,12 @@ export default function InboxScreen({ tasks, onMoveToToday, onDelete }: Props) {
               key={task.id}
               className="flex items-center gap-3 rounded-2xl bg-(--color-surface) p-4"
             >
+              <span
+                className={`h-2.5 w-2.5 shrink-0 rounded-full ${
+                  PRIORITY_COLOR[task.priority ?? "low"]
+                }`}
+                aria-hidden="true"
+              />
               <span className="flex-1 text-[17px] leading-snug">
                 {task.title}
               </span>

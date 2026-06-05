@@ -1,10 +1,14 @@
 export type TabKey = "capture" | "inbox" | "today";
 
+export type Priority = "low" | "medium" | "high";
+
 export interface Task {
   id: string;
   title: string;
-  /** Raw text the task was parsed from (for future AI use). */
+  /** Raw text the task was parsed from. */
   source?: string;
+  /** Priority assigned by the AI parser. */
+  priority?: Priority;
   done: boolean;
   /** Marks the task as scheduled for the Today checklist. */
   today: boolean;

@@ -23,25 +23,33 @@ export default function Home() {
   const todayTasks = useMemo(() => tasks.filter((t) => t.today), [tasks]);
 
   /**
-   * Placeholder for the future AI step: for now we just split the brain-dump
-   * into one task per line. Swap this out for an LLM call later.
+   * Sends the brain-dump to the AI parser and turns the result into tasks.
+   * Throws on failure so CaptureScreen can surface the error.
    */
-  const handleCapture = (text: string) => {
-    const titles = text
-      .split("\n")
-      .map((line) => line.trim())
-      .filter(Boolean);
-    const created: Task[] = titles.map((title) => ({
-      id: newId(),
-      title,
-      source: text,
-      done: false,
-      today: false,
-      createdAt: 0,
-    }));
+  const handleCapture = async (text: string) => {
+    const res = await fetch("/api/parse", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ text }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error ?? "Не вдалося розібрати.");
+
+    const created: Task[] = (data.tasks ?? []).map(
+      (t: { title: string; priority: Task["priority"]; today: boolean }) => ({
+        id: newId(),
+        title: t.title,
+        source: text,
+        priority: t.priority,
+        done: false,
+        today: Boolean(t.today),
+        createdAt: 0,
+      }),
+    );
     if (created.length === 0) return;
     setTasks((prev) => [...created, ...prev]);
-    setTab("inbox");
+    // Land on whichever screen got new tasks.
+    setTab(created.some((t) => t.today) ? "today" : "inbox");
   };
 
   const moveToToday = (id: string) =>

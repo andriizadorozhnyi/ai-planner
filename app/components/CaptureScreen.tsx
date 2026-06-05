@@ -3,18 +3,28 @@
 import { useState } from "react";
 
 interface Props {
-  /** Hands the raw brain-dump off to be turned into tasks. */
-  onCapture: (text: string) => void;
+  /** Hands the raw brain-dump off to be turned into tasks by the AI. */
+  onCapture: (text: string) => Promise<void>;
 }
 
 export default function CaptureScreen({ onCapture }: Props) {
   const [text, setText] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  const save = () => {
+  const save = async () => {
     const trimmed = text.trim();
-    if (!trimmed) return;
-    onCapture(trimmed);
-    setText("");
+    if (!trimmed || busy) return;
+    setBusy(true);
+    setError(null);
+    try {
+      await onCapture(trimmed);
+      setText("");
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Щось пішло не так.");
+    } finally {
+      setBusy(false);
+    }
   };
 
   return (
@@ -28,10 +38,17 @@ export default function CaptureScreen({ onCapture }: Props) {
       <textarea
         value={text}
         onChange={(e) => setText(e.target.value)}
+        disabled={busy}
         placeholder="Подзвонити в банк, купити воду, дедлайн по звіту в пʼятницю…"
         autoFocus
-        className="mt-4 min-h-0 flex-1 resize-none rounded-2xl bg-(--color-surface) p-4 text-lg leading-relaxed text-(--color-text) placeholder:text-(--color-muted)/60 outline-none focus:ring-2 focus:ring-(--color-accent)"
+        className="mt-4 min-h-0 flex-1 resize-none rounded-2xl bg-(--color-surface) p-4 text-lg leading-relaxed text-(--color-text) placeholder:text-(--color-muted)/60 outline-none focus:ring-2 focus:ring-(--color-accent) disabled:opacity-60"
       />
+
+      {error && (
+        <p className="mt-3 rounded-xl bg-red-500/15 px-4 py-3 text-sm text-red-300">
+          {error}
+        </p>
+      )}
 
       <div className="flex items-center gap-3 py-5">
         {/* Big mic button — thumb-sized, primary action */}
@@ -49,10 +66,10 @@ export default function CaptureScreen({ onCapture }: Props) {
         <button
           type="button"
           onClick={save}
-          disabled={!text.trim()}
-          className="h-16 flex-1 rounded-full bg-(--color-surface-2) text-lg font-semibold text-(--color-text) transition active:scale-[0.98] disabled:opacity-40"
+          disabled={!text.trim() || busy}
+          className="h-16 flex-1 rounded-full bg-(--color-accent) text-lg font-semibold text-white transition active:scale-[0.98] disabled:opacity-40"
         >
-          Розібрати →
+          {busy ? "Розбираю…" : "Розібрати →"}
         </button>
       </div>
     </div>
