@@ -45,6 +45,7 @@ export default function Home() {
         title: string;
         priority: Task["priority"];
         estimateMin?: number;
+        due?: string | null;
         today: boolean;
       }) => ({
         id: newId(),
@@ -53,6 +54,7 @@ export default function Home() {
         priority: t.priority,
         estimateMin:
           typeof t.estimateMin === "number" ? t.estimateMin : undefined,
+        due: typeof t.due === "string" && t.due ? t.due : undefined,
         done: false,
         today: Boolean(t.today),
         createdAt: 0,

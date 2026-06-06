@@ -1,12 +1,17 @@
 "use client";
 
+import { useMemo, useState } from "react";
+import { formatDue, hasDue, isOverdue, todayISO } from "../lib/due";
 import type { Priority, Task } from "../lib/types";
+import FilterChips, { type FilterChip } from "./FilterChips";
 
 const PRIORITY_COLOR: Record<Priority, string> = {
   high: "bg-(--color-accent)",
   medium: "bg-white/60",
   low: "bg-white/25",
 };
+
+type FilterKey = "all" | "high" | "due" | "overdue";
 
 interface Props {
   tasks: Task[];
@@ -21,6 +26,45 @@ export default function InboxScreen({
   onDelete,
   onGoToCapture,
 }: Props) {
+  const [filter, setFilter] = useState<FilterKey>("all");
+
+  // Today is computed once per render; good enough for a single-user mobile app.
+  const today = todayISO();
+
+  // Counts power the chip badges. Compute over the FULL list so the user can
+  // see "there are 3 overdue items" even from inside another filter.
+  const counts = useMemo(() => {
+    let high = 0;
+    let due = 0;
+    let overdue = 0;
+    for (const t of tasks) {
+      if (t.priority === "high") high++;
+      if (hasDue(t)) due++;
+      if (isOverdue(t, today)) overdue++;
+    }
+    return { all: tasks.length, high, due, overdue };
+  }, [tasks, today]);
+
+  const visible = useMemo(() => {
+    switch (filter) {
+      case "high":
+        return tasks.filter((t) => t.priority === "high");
+      case "due":
+        return tasks.filter(hasDue);
+      case "overdue":
+        return tasks.filter((t) => isOverdue(t, today));
+      default:
+        return tasks;
+    }
+  }, [tasks, filter, today]);
+
+  const chips: FilterChip<FilterKey>[] = [
+    { key: "all", label: "Усі", count: counts.all },
+    { key: "high", label: "Високі", count: counts.high },
+    { key: "due", label: "З дедлайном", count: counts.due },
+    { key: "overdue", label: "Прострочені", count: counts.overdue },
+  ];
+
   return (
     <div className="flex h-full flex-col px-5 pt-8">
       <h1 className="text-[34px] leading-none font-medium tracking-tight">Inbox</h1>
@@ -33,40 +77,72 @@ export default function InboxScreen({
       {tasks.length === 0 ? (
         <EmptyState onGoToCapture={onGoToCapture} />
       ) : (
-        <ul className="mt-5 flex-1 space-y-2 overflow-y-auto pb-4">
-          {tasks.map((task) => (
-            <li
-              key={task.id}
-              className="flex items-center gap-3 rounded-2xl border border-(--color-border) bg-(--color-surface) p-3 pl-4"
-            >
-              <span
-                className={`h-2.5 w-2.5 shrink-0 rounded-full ${PRIORITY_COLOR[task.priority ?? "low"]}`}
-                aria-label={`Пріоритет: ${task.priority ?? "low"}`}
-              />
-              <span className="flex-1 text-[17px] leading-snug">{task.title}</span>
-              {task.estimateMin != null && (
-                <span className="shrink-0 text-[13px] tabular-nums text-(--color-muted)">
-                  {fmt(task.estimateMin)}
-                </span>
-              )}
-              <button
-                type="button"
-                onClick={() => onMoveToToday(task.id)}
-                className="h-11 shrink-0 rounded-xl bg-(--color-accent) px-4 text-[14px] font-medium text-white transition active:scale-95 active:bg-(--color-accent-press)"
-              >
-                Сьогодні
-              </button>
-              <button
-                type="button"
-                aria-label="Видалити"
-                onClick={() => onDelete(task.id)}
-                className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-(--color-border) text-(--color-muted) transition active:scale-95"
-              >
-                <CloseIcon />
-              </button>
-            </li>
-          ))}
-        </ul>
+        <>
+          <div className="mt-4">
+            <FilterChips
+              chips={chips}
+              active={filter}
+              onChange={setFilter}
+              ariaLabel="Фільтри Inbox"
+            />
+          </div>
+
+          {visible.length === 0 ? (
+            <FilteredEmpty filter={filter} onReset={() => setFilter("all")} />
+          ) : (
+            <ul className="mt-4 flex-1 space-y-2 overflow-y-auto pb-4">
+              {visible.map((task) => {
+                const overdue = isOverdue(task, today);
+                return (
+                  <li
+                    key={task.id}
+                    className="flex items-center gap-3 rounded-2xl border border-(--color-border) bg-(--color-surface) p-3 pl-4"
+                  >
+                    <span
+                      className={`h-2.5 w-2.5 shrink-0 rounded-full ${PRIORITY_COLOR[task.priority ?? "low"]}`}
+                      aria-label={`Пріоритет: ${task.priority ?? "low"}`}
+                    />
+                    <div className="min-w-0 flex-1">
+                      <div className="text-[17px] leading-snug">{task.title}</div>
+                      <div className="mt-0.5 flex items-center gap-3 text-[12px] text-(--color-caption)">
+                        {task.estimateMin != null && (
+                          <span className="tabular-nums">{fmt(task.estimateMin)}</span>
+                        )}
+                        {task.due && (
+                          <span
+                            className={`tabular-nums ${
+                              overdue
+                                ? "font-medium text-(--color-accent)"
+                                : "text-(--color-muted)"
+                            }`}
+                          >
+                            {overdue ? "⚠ " : "📅 "}
+                            {formatDue(task.due, today)}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => onMoveToToday(task.id)}
+                      className="h-11 shrink-0 rounded-xl bg-(--color-accent) px-4 text-[14px] font-medium text-white transition active:scale-95 active:bg-(--color-accent-press)"
+                    >
+                      Сьогодні
+                    </button>
+                    <button
+                      type="button"
+                      aria-label="Видалити"
+                      onClick={() => onDelete(task.id)}
+                      className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-(--color-border) text-(--color-muted) transition active:scale-95"
+                    >
+                      <CloseIcon />
+                    </button>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+        </>
       )}
     </div>
   );
@@ -93,6 +169,38 @@ function EmptyState({ onGoToCapture }: { onGoToCapture: () => void }) {
   );
 }
 
+function FilteredEmpty({
+  filter,
+  onReset,
+}: {
+  filter: FilterKey;
+  onReset: () => void;
+}) {
+  const label =
+    filter === "high"
+      ? "Високих задач немає."
+      : filter === "due"
+        ? "Задач із дедлайном немає."
+        : "Прострочених немає.";
+  return (
+    <div className="flex flex-1 flex-col items-center justify-center pb-10 text-center">
+      <p className="max-w-[280px] text-[17px] leading-snug text-(--color-text)">
+        {label}
+      </p>
+      <p className="mt-1 max-w-[280px] text-[15px] text-(--color-muted)">
+        {filter === "overdue" ? "Молодець." : "Спробуй інший фільтр."}
+      </p>
+      <button
+        type="button"
+        onClick={onReset}
+        className="mt-6 h-12 rounded-2xl border border-(--color-border) bg-(--color-surface) px-6 text-[15px] font-medium text-(--color-text) transition active:scale-95"
+      >
+        Показати всі
+      </button>
+    </div>
+  );
+}
+
 function CloseIcon() {
   return (
     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -109,7 +217,6 @@ function fmt(min: number): string {
   return `${m} хв`;
 }
 
-/** Ukrainian plural — one / few / many. */
 function pluralUk(n: number, forms: [string, string, string]): string {
   const mod10 = n % 10;
   const mod100 = n % 100;

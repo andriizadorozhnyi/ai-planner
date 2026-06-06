@@ -1,5 +1,6 @@
 "use client";
 
+import { formatDue, isOverdue, todayISO } from "../lib/due";
 import type { Task } from "../lib/types";
 
 interface Props {
@@ -133,15 +134,29 @@ export default function TodayScreen({
                   >
                     {task.done && <CheckIcon />}
                   </span>
-                  <span
-                    className={`flex-1 text-[17px] leading-snug ${
-                      task.done
-                        ? "text-(--color-muted) line-through"
-                        : "text-(--color-text)"
-                    }`}
-                  >
-                    {task.title}
-                  </span>
+                  <div className="min-w-0 flex-1">
+                    <div
+                      className={`text-[17px] leading-snug ${
+                        task.done
+                          ? "text-(--color-muted) line-through"
+                          : "text-(--color-text)"
+                      }`}
+                    >
+                      {task.title}
+                    </div>
+                    {task.due && !task.done && (
+                      <div
+                        className={`mt-0.5 text-[12px] tabular-nums ${
+                          isOverdue(task, todayISO())
+                            ? "font-medium text-(--color-accent)"
+                            : "text-(--color-caption)"
+                        }`}
+                      >
+                        {isOverdue(task, todayISO()) ? "⚠ " : "📅 "}
+                        {formatDue(task.due, todayISO())}
+                      </div>
+                    )}
+                  </div>
                   {task.estimateMin != null && (
                     <span className="shrink-0 text-[13px] tabular-nums text-(--color-muted)">
                       {fmt(task.estimateMin)}
