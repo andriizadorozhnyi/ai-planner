@@ -25,20 +25,30 @@ type SpeechRecognitionCtor = new () => SpeechRecognitionLike;
 
 interface Options {
   lang?: string;
-  /** Called with each finalized chunk of recognized speech. */
-  onResult: (text: string) => void;
 }
 
-export function useSpeechRecognition({ lang = "uk-UA", onResult }: Options) {
+/**
+ * Wraps the Web Speech API and exposes a stable `transcript` (committed
+ * recognized text) plus `interim` (live preview).
+ *
+ * Why per-index replace (not append): Chrome on Android, under
+ * `continuous: true`, repeatedly re-fires the same "final" result at the
+ * same `resultIndex`, growing its content each time. Naively appending
+ * each final chunk produces "Мені Мені дуже Мені дуже…" duplication.
+ * Storing finals in a slot array and joining keeps the transcript stable
+ * on both Android and desktop behaviors.
+ */
+export function useSpeechRecognition({ lang = "uk-UA" }: Options = {}) {
   const [supported, setSupported] = useState(false);
   const [listening, setListening] = useState(false);
+  const [transcript, setTranscript] = useState("");
   const [interim, setInterim] = useState("");
   const [error, setError] = useState<string | null>(null);
 
   const recRef = useRef<SpeechRecognitionLike | null>(null);
-  // Keep the latest callback without re-creating the recognizer.
-  const onResultRef = useRef(onResult);
-  onResultRef.current = onResult;
+  // One slot per `resultIndex` — last writer wins. Android Chrome rewrites
+  // index 0 repeatedly; desktop Chrome advances the index normally. Both work.
+  const finalsRef = useRef<string[]>([]);
 
   useEffect(() => {
     const w = window as unknown as {
@@ -61,13 +71,19 @@ export function useSpeechRecognition({ lang = "uk-UA", onResult }: Options) {
       let interimStr = "";
       for (let i = e.resultIndex; i < e.results.length; i++) {
         const r = e.results[i];
-        if (r.isFinal) onResultRef.current(r[0].transcript);
-        else interimStr += r[0].transcript;
+        const t = r[0].transcript;
+        if (r.isFinal) {
+          finalsRef.current[i] = t; // REPLACE, do not append
+        } else {
+          interimStr += t;
+        }
       }
-      setInterim(interimStr);
+      setTranscript(
+        finalsRef.current.filter(Boolean).join(" ").replace(/\s+/g, " ").trim(),
+      );
+      setInterim(interimStr.trim());
     };
     rec.onerror = (e) => {
-      // "no-speech" / "aborted" are routine; surface only meaningful errors.
       if (e.error === "not-allowed" || e.error === "service-not-allowed") {
         setError("Немає доступу до мікрофона. Дозволь його в браузері.");
       } else if (e.error !== "no-speech" && e.error !== "aborted") {
@@ -96,6 +112,10 @@ export function useSpeechRecognition({ lang = "uk-UA", onResult }: Options) {
   const start = useCallback(() => {
     const rec = recRef.current;
     if (!rec || listening) return;
+    // Fresh session — wipe prior finals so we don't carry over a previous run.
+    finalsRef.current = [];
+    setTranscript("");
+    setInterim("");
     setError(null);
     try {
       rec.start();
@@ -114,10 +134,28 @@ export function useSpeechRecognition({ lang = "uk-UA", onResult }: Options) {
     setListening(false);
   }, []);
 
+  const reset = useCallback(() => {
+    finalsRef.current = [];
+    setTranscript("");
+    setInterim("");
+  }, []);
+
   const toggle = useCallback(() => {
     if (listening) stop();
     else start();
   }, [listening, start, stop]);
 
-  return { supported, listening, interim, error, toggle, stop };
+  return {
+    supported,
+    listening,
+    /** Committed recognized text since the last start(). */
+    transcript,
+    /** Live preview of the currently-spoken phrase. */
+    interim,
+    error,
+    start,
+    stop,
+    reset,
+    toggle,
+  };
 }

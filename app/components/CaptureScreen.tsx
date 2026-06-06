@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useSpeechRecognition } from "../lib/useSpeechRecognition";
 
 interface Props {
@@ -8,29 +8,42 @@ interface Props {
   onCapture: (text: string) => Promise<void>;
 }
 
+/** Append two pieces of text with a single space, trimmed. */
+function join(a: string, b: string): string {
+  if (!a) return b;
+  if (!b) return a;
+  return `${a.replace(/\s+$/, "")} ${b}`.trim();
+}
+
 export default function CaptureScreen({ onCapture }: Props) {
   const [text, setText] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const speech = useSpeechRecognition({
-    lang: "uk-UA",
-    onResult: (chunk) => {
-      const clean = chunk.trim();
-      if (!clean) return;
-      setText((prev) => (prev ? `${prev} ${clean}` : clean));
-    },
-  });
+  const speech = useSpeechRecognition({ lang: "uk-UA" });
+
+  // Snapshot of what was already in the field when the user started talking.
+  // The full text shown while listening = baseline + speech.transcript.
+  // This avoids any "append per result" logic in the parent — single source of truth.
+  const baselineRef = useRef("");
+
+  // Live-merge dictation into the textarea while listening.
+  useEffect(() => {
+    if (!speech.listening) return;
+    setText(join(baselineRef.current, speech.transcript));
+  }, [speech.listening, speech.transcript]);
 
   const save = async () => {
     const trimmed = text.trim();
     if (!trimmed || busy) return;
     speech.stop();
+    speech.reset();
     setBusy(true);
     setError(null);
     try {
       await onCapture(trimmed);
       setText("");
+      baselineRef.current = "";
     } catch (e) {
       setError(e instanceof Error ? e.message : "Щось пішло не так.");
     } finally {
@@ -47,7 +60,16 @@ export default function CaptureScreen({ onCapture }: Props) {
       return;
     }
     setError(null);
-    speech.toggle();
+    if (speech.listening) {
+      speech.stop();
+      // What's in the textarea is the merged committed text — keep it as the
+      // new baseline so any further typing/dictating starts from here.
+      baselineRef.current = text;
+    } else {
+      // Lock in the current text as the baseline; new dictation appends to it.
+      baselineRef.current = text;
+      speech.start();
+    }
   };
 
   const shownError = error ?? speech.error;
@@ -65,7 +87,11 @@ export default function CaptureScreen({ onCapture }: Props) {
       <div className="mt-4 flex min-h-0 flex-1 flex-col rounded-2xl bg-(--color-surface) focus-within:ring-2 focus-within:ring-(--color-accent)">
         <textarea
           value={text}
-          onChange={(e) => setText(e.target.value)}
+          onChange={(e) => {
+            setText(e.target.value);
+            // If user manually edits, reset baseline so dictation appends to the edited version.
+            if (!speech.listening) baselineRef.current = e.target.value;
+          }}
           disabled={busy}
           placeholder="Подзвонити в банк, купити воду, дедлайн по звіту в пʼятницю…"
           autoFocus
@@ -85,7 +111,6 @@ export default function CaptureScreen({ onCapture }: Props) {
       )}
 
       <div className="flex items-center gap-3 py-5">
-        {/* Big mic button — thumb-sized, toggles dictation */}
         <button
           type="button"
           aria-label={speech.listening ? "Зупинити запис" : "Диктувати голосом"}
