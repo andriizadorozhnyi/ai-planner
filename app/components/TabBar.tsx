@@ -22,8 +22,11 @@ const TABS: { key: TabKey; label: string; icon: React.ReactNode }[] = [
 export default function TabBar({ active, onChange, inboxCount }: Props) {
   return (
     <nav
-      className="shrink-0 border-t border-(--color-border) bg-(--color-bg-alt)"
-      style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
+      className="shrink-0 border-t border-(--color-border) bg-(--color-surface)"
+      style={{
+        paddingBottom: "env(safe-area-inset-bottom)",
+        boxShadow: "0 -4px 20px rgba(26, 22, 20, 0.05)",
+      }}
       aria-label="Основна навігація"
     >
       <div className="flex">

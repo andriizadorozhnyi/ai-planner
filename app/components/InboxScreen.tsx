@@ -6,9 +6,9 @@ import type { Priority, Task } from "../lib/types";
 import FilterChips, { type FilterChip } from "./FilterChips";
 
 const PRIORITY_COLOR: Record<Priority, string> = {
-  high: "bg-(--color-accent)",
-  medium: "bg-white/60",
-  low: "bg-white/25",
+  high: "bg-(--color-prio-high)",
+  medium: "bg-(--color-prio-medium)",
+  low: "bg-(--color-prio-low)",
 };
 
 type FilterKey = "all" | "high" | "due" | "overdue";
@@ -96,7 +96,7 @@ export default function InboxScreen({
                 return (
                   <li
                     key={task.id}
-                    className="rounded-2xl border border-(--color-border) bg-(--color-surface) p-4"
+                    className="rounded-2xl border border-(--color-border) bg-(--color-surface) p-4 shadow-soft"
                   >
                     {/* Row 1: text + estimate */}
                     <div className="flex items-start gap-3">
@@ -174,7 +174,7 @@ function EmptyState({ onGoToCapture }: { onGoToCapture: () => void }) {
       <button
         type="button"
         onClick={onGoToCapture}
-        className="mt-6 h-12 rounded-2xl bg-(--color-accent) px-6 text-[15px] font-medium text-white transition active:scale-95 active:bg-(--color-accent-press)"
+        className="mt-6 h-12 rounded-2xl bg-(--color-accent) px-6 text-[15px] font-medium text-white shadow-cta transition active:scale-95 active:bg-(--color-accent-press)"
       >
         Записати думку →
       </button>

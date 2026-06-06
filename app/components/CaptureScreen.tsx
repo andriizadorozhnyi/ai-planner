@@ -79,7 +79,7 @@ export default function CaptureScreen({ onCapture }: Props) {
       </p>
 
       {/* Capture field — full-bleed, generous padding, live interim below the text */}
-      <div className="mt-5 flex min-h-0 flex-1 flex-col rounded-2xl border border-(--color-border) bg-(--color-surface) transition-colors focus-within:border-white/20">
+      <div className="mt-5 flex min-h-0 flex-1 flex-col rounded-2xl border border-(--color-border) bg-(--color-surface) shadow-soft transition-colors focus-within:border-(--color-accent)/40">
         <textarea
           value={text}
           onChange={(e) => {
@@ -129,7 +129,7 @@ export default function CaptureScreen({ onCapture }: Props) {
           type="button"
           onClick={save}
           disabled={!hasText || busy}
-          className="h-14 flex-1 rounded-2xl bg-(--color-accent) text-[17px] font-medium tracking-tight text-white transition active:scale-[0.98] active:bg-(--color-accent-press) disabled:opacity-30"
+          className="h-14 flex-1 rounded-2xl bg-(--color-accent) text-[17px] font-medium tracking-tight text-white shadow-cta transition active:scale-[0.98] active:bg-(--color-accent-press) disabled:opacity-30 disabled:shadow-none"
         >
           {busy ? "Розбираю…" : "Розібрати"}
         </button>

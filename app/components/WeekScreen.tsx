@@ -148,12 +148,12 @@ export default function WeekScreen({
               <span
                 aria-hidden="true"
                 className={`mt-0.5 h-0.5 w-7 overflow-hidden rounded-full ${
-                  isSel ? "bg-white/30" : "bg-white/10"
+                  isSel ? "bg-white/30" : "bg-(--color-track)"
                 }`}
               >
                 <span
                   className={`block h-full ${
-                    isSel ? "bg-white/80" : "bg-(--color-accent)"
+                    isSel ? "bg-white/90" : "bg-(--color-accent)"
                   }`}
                   style={{ width: `${loadPct}%` }}
                 />
@@ -186,7 +186,7 @@ export default function WeekScreen({
       {/* KPI plate — only on today's view, only when there's anything */}
       {isToday && (dayTasks.length > 0 || daySlots.length > 0) && (
         <section
-          className={`mt-4 rounded-2xl border p-5 transition ${
+          className={`mt-4 rounded-2xl border p-5 shadow-soft transition ${
             overloaded
               ? "border-(--color-accent)/40 bg-(--color-accent)/10"
               : "border-(--color-border) bg-(--color-surface)"
@@ -229,10 +229,10 @@ export default function WeekScreen({
               </button>
             </div>
           </div>
-          <div className="mt-4 h-2 overflow-hidden rounded-full bg-white/5">
+          <div className="mt-4 h-2 overflow-hidden rounded-full bg-(--color-track)">
             <div
               className={`h-full rounded-full transition-[width] ${
-                overloaded ? "bg-(--color-accent)" : "bg-white/60"
+                overloaded ? "bg-(--color-accent)" : "bg-(--color-fill)"
               }`}
               style={{ width: `${Math.min(100, fillPct)}%` }}
             />
@@ -297,7 +297,7 @@ export default function WeekScreen({
                 <button
                   type="button"
                   onClick={() => onToggle(task.id)}
-                  className="flex min-h-14 w-full items-center gap-4 rounded-2xl border border-(--color-border) bg-(--color-surface) p-4 text-left transition active:scale-[0.99]"
+                  className="flex min-h-14 w-full items-center gap-4 rounded-2xl border border-(--color-border) bg-(--color-surface) p-4 text-left shadow-soft transition active:scale-[0.99]"
                 >
                   <span
                     aria-hidden="true"

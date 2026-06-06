@@ -11,7 +11,7 @@ export const viewport: Viewport = {
   initialScale: 1,
   maximumScale: 1,
   userScalable: false,
-  themeColor: "#222631", // SKELAR New Blue 85
+  themeColor: "#F7F6F2", // Soft Daylight — warm milk
 };
 
 export default function RootLayout({
