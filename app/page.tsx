@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import CaptureScreen from "./components/CaptureScreen";
 import InboxScreen from "./components/InboxScreen";
+import StartLights from "./components/StartLights";
 import TabBar from "./components/TabBar";
 import WeekScreen from "./components/WeekScreen";
 import { addDaysISO, todayISO } from "./lib/due";
@@ -30,6 +31,26 @@ export default function Home() {
   );
   // Selected day in the Week tab. Defaults to today.
   const [selectedDay, setSelectedDay] = useState<string>(() => todayISO());
+  // F1 start-lights intro — once per day. Starts false (no SSR flash), flipped
+  // on in an effect if today's ritual hasn't played yet.
+  const [showIntro, setShowIntro] = useState(false);
+  useEffect(() => {
+    try {
+      if (localStorage.getItem("ai-planner.introDate") !== todayISO()) {
+        setShowIntro(true);
+      }
+    } catch {
+      // storage unavailable — just skip the intro
+    }
+  }, []);
+  const dismissIntro = () => {
+    setShowIntro(false);
+    try {
+      localStorage.setItem("ai-planner.introDate", todayISO());
+    } catch {
+      // ignore
+    }
+  };
 
   // One-time migration: pre-Sprint-2 tasks carried `today: boolean`. Convert
   // to the new `day` field, then strip the legacy flag.
@@ -166,6 +187,7 @@ export default function Home() {
 
   return (
     <main className="mx-auto flex h-dvh max-w-md flex-col">
+      {showIntro && <StartLights onDone={dismissIntro} />}
       <section className="min-h-0 flex-1">
         {tab === "capture" && <CaptureScreen onCapture={handleCapture} />}
         {tab === "inbox" && (

@@ -84,3 +84,11 @@ button {
   outline: 2px solid var(--color-accent);
   outline-offset: 2px;
 }
+
+/* The capture field is a writing surface, not a form control — keep its focus
+ * calm (handled by an elevation lift on the wrapper). Higher specificity than
+ * the rule above, so it wins even though both are unlayered. */
+textarea:focus,
+textarea:focus-visible {
+  outline: none;
+}
