@@ -7,9 +7,10 @@ interface Props {
   onToggle: (id: string) => void;
   capacityHours: number;
   onCapacityChange: (hours: number) => void;
+  onGoToInbox: () => void;
 }
 
-/** Minutes → compact "Хг Yхв". */
+/** Minutes → "Xг Yхв" — short, tabular-friendly. */
 function fmt(min: number): string {
   const h = Math.floor(min / 60);
   const m = Math.round(min % 60);
@@ -23,125 +24,164 @@ export default function TodayScreen({
   onToggle,
   capacityHours,
   onCapacityChange,
+  onGoToInbox,
 }: Props) {
   const doneCount = tasks.filter((t) => t.done).length;
-
-  // Planned load = sum of estimates across today's tasks (missing → 0).
-  const plannedMin = tasks.reduce((sum, t) => sum + (t.estimateMin ?? 0), 0);
+  const plannedMin = tasks.reduce((s, t) => s + (t.estimateMin ?? 0), 0);
   const capacityMin = capacityHours * 60;
+  const fillPct = Math.min(120, Math.round((plannedMin / capacityMin) * 100));
   const overloaded = plannedMin > capacityMin;
-  const remainingMin = capacityMin - plannedMin;
+  const remainingMin = Math.max(0, capacityMin - plannedMin);
 
   const setHours = (h: number) =>
     onCapacityChange(Math.min(16, Math.max(1, h)));
 
   return (
-    <div className="flex h-full flex-col px-5 pt-6">
-      <h1 className="text-2xl font-semibold tracking-tight">Сьогодні</h1>
-      <p className="mt-1 text-[15px] text-(--color-muted)">
+    <div className="flex h-full flex-col px-5 pt-8">
+      <h1 className="text-[34px] leading-none font-medium tracking-tight">Сьогодні</h1>
+      <p className="mt-2 text-[15px] text-(--color-muted)">
         {tasks.length === 0
           ? "Чекліст на день."
-          : `${doneCount} з ${tasks.length} виконано${
-              plannedMin > 0 ? ` · заплановано ≈ ${fmt(plannedMin)}` : ""
-            }`}
+          : `${doneCount} з ${tasks.length} виконано`}
       </p>
 
-      {tasks.length > 0 && (
-        <>
-          {/* Capacity stepper */}
-          <div className="mt-4 flex items-center justify-between rounded-2xl bg-(--color-surface) px-4 py-3">
-            <span className="text-[15px] text-(--color-muted)">Ємність дня</span>
-            <div className="flex items-center gap-3">
-              <button
-                type="button"
-                aria-label="Менше годин"
-                onClick={() => setHours(capacityHours - 1)}
-                className="flex h-9 w-9 items-center justify-center rounded-full bg-(--color-surface-2) text-xl leading-none text-(--color-text) transition active:scale-90"
-              >
-                −
-              </button>
-              <span className="min-w-16 text-center text-[15px] font-semibold tabular-nums">
-                {capacityHours} год
-              </span>
-              <button
-                type="button"
-                aria-label="Більше годин"
-                onClick={() => setHours(capacityHours + 1)}
-                className="flex h-9 w-9 items-center justify-center rounded-full bg-(--color-surface-2) text-xl leading-none text-(--color-text) transition active:scale-90"
-              >
-                +
-              </button>
-            </div>
-          </div>
-
-          {/* Realism banner */}
-          {overloaded ? (
-            <p className="mt-3 rounded-xl bg-red-500/15 px-4 py-3 text-sm text-red-300">
-              ⚠️ Задач на ≈ {fmt(plannedMin)}, а в дні {capacityHours} год.
-              Перенеси частину або прибери дрібниці.
-            </p>
-          ) : (
-            plannedMin > 0 && (
-              <p className="mt-3 rounded-xl bg-(--color-surface) px-4 py-3 text-sm text-(--color-muted)">
-                👍 Влізає. Вільно ще ≈ {fmt(remainingMin)}.
-              </p>
-            )
-          )}
-        </>
-      )}
-
       {tasks.length === 0 ? (
-        <EmptyState />
+        <EmptyState onGoToInbox={onGoToInbox} />
       ) : (
-        <ul className="mt-4 flex-1 space-y-3 overflow-y-auto pb-4">
-          {tasks.map((task) => (
-            <li key={task.id}>
-              <button
-                type="button"
-                onClick={() => onToggle(task.id)}
-                className="flex w-full items-center gap-4 rounded-2xl bg-(--color-surface) p-4 text-left transition active:scale-[0.99]"
-              >
-                <span
-                  className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full border-2 transition ${
-                    task.done
-                      ? "border-(--color-accent) bg-(--color-accent) text-white"
-                      : "border-(--color-border)"
+        <>
+          {/* KPI tile — the day at a glance. The big number IS the headline. */}
+          <section
+            className={`mt-5 rounded-2xl border p-5 transition ${
+              overloaded
+                ? "border-(--color-accent)/40 bg-(--color-accent)/10"
+                : "border-(--color-border) bg-(--color-surface)"
+            }`}
+            aria-label="Завантаженість дня"
+          >
+            <div className="flex items-baseline justify-between gap-3">
+              <div className="min-w-0">
+                <div
+                  className={`text-[32px] leading-none font-medium tracking-tight tabular-nums ${
+                    overloaded ? "text-(--color-accent)" : "text-(--color-text)"
                   }`}
                 >
-                  {task.done ? "✓" : ""}
-                </span>
-                <span
-                  className={`flex-1 text-[17px] leading-snug ${
-                    task.done
-                      ? "text-(--color-muted) line-through"
-                      : "text-(--color-text)"
-                  }`}
+                  {fmt(plannedMin)}
+                </div>
+                <div className="mt-1 text-[13px] text-(--color-muted)">
+                  з {capacityHours} год дня
+                  {!overloaded && plannedMin > 0 && (
+                    <> · вільно {fmt(remainingMin)}</>
+                  )}
+                </div>
+              </div>
+
+              {/* Capacity stepper — 44×44 each, tabular numerals for steady width */}
+              <div className="flex items-center gap-2" aria-label="Ємність дня">
+                <button
+                  type="button"
+                  aria-label="Менше годин"
+                  onClick={() => setHours(capacityHours - 1)}
+                  className="flex h-11 w-11 items-center justify-center rounded-xl border border-(--color-border) bg-(--color-bg-alt) text-xl leading-none text-(--color-text) transition active:scale-90"
                 >
-                  {task.title}
+                  −
+                </button>
+                <span className="min-w-7 text-center text-[15px] font-medium tabular-nums">
+                  {capacityHours}
                 </span>
-                {task.estimateMin != null && (
-                  <span className="shrink-0 text-sm tabular-nums text-(--color-muted)">
-                    {fmt(task.estimateMin)}
+                <button
+                  type="button"
+                  aria-label="Більше годин"
+                  onClick={() => setHours(capacityHours + 1)}
+                  className="flex h-11 w-11 items-center justify-center rounded-xl border border-(--color-border) bg-(--color-bg-alt) text-xl leading-none text-(--color-text) transition active:scale-90"
+                >
+                  +
+                </button>
+              </div>
+            </div>
+
+            {/* Progress bar — also the realism signal. Red overflow when over. */}
+            <div className="mt-4 h-2 overflow-hidden rounded-full bg-white/5">
+              <div
+                className={`h-full rounded-full transition-[width] ${
+                  overloaded ? "bg-(--color-accent)" : "bg-white/60"
+                }`}
+                style={{ width: `${Math.min(100, fillPct)}%` }}
+              />
+            </div>
+            {overloaded && (
+              <p className="mt-3 text-[13px] font-medium text-(--color-accent)">
+                Перенеси частину на інший день або прибери дрібниці.
+              </p>
+            )}
+          </section>
+
+          <ul className="mt-4 flex-1 space-y-2 overflow-y-auto pb-4">
+            {tasks.map((task) => (
+              <li key={task.id}>
+                <button
+                  type="button"
+                  onClick={() => onToggle(task.id)}
+                  className="flex min-h-14 w-full items-center gap-4 rounded-2xl border border-(--color-border) bg-(--color-surface) p-4 text-left transition active:scale-[0.99]"
+                >
+                  <span
+                    aria-hidden="true"
+                    className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full border-2 transition ${
+                      task.done
+                        ? "border-(--color-accent) bg-(--color-accent) text-white"
+                        : "border-(--color-border)"
+                    }`}
+                  >
+                    {task.done && <CheckIcon />}
                   </span>
-                )}
-              </button>
-            </li>
-          ))}
-        </ul>
+                  <span
+                    className={`flex-1 text-[17px] leading-snug ${
+                      task.done
+                        ? "text-(--color-muted) line-through"
+                        : "text-(--color-text)"
+                    }`}
+                  >
+                    {task.title}
+                  </span>
+                  {task.estimateMin != null && (
+                    <span className="shrink-0 text-[13px] tabular-nums text-(--color-muted)">
+                      {fmt(task.estimateMin)}
+                    </span>
+                  )}
+                </button>
+              </li>
+            ))}
+          </ul>
+        </>
       )}
     </div>
   );
 }
 
-function EmptyState() {
+function EmptyState({ onGoToInbox }: { onGoToInbox: () => void }) {
   return (
-    <div className="flex flex-1 flex-col items-center justify-center text-center text-(--color-muted)">
-      <div className="text-5xl">☀️</div>
-      <p className="mt-3 text-[15px]">
+    <div className="flex flex-1 flex-col items-center justify-center pb-10 text-center">
+      <div className="text-[42px]" aria-hidden="true">☀️</div>
+      <p className="mt-4 max-w-[280px] text-[17px] leading-snug text-(--color-text)">
         На сьогодні нічого.
-        <br />
-        Перенеси задачі з Inbox.
       </p>
+      <p className="mt-1 max-w-[280px] text-[15px] text-(--color-muted)">
+        Перенеси задачі з Inbox — і день візьме форму.
+      </p>
+      <button
+        type="button"
+        onClick={onGoToInbox}
+        className="mt-6 h-12 rounded-2xl border border-(--color-border) bg-(--color-surface) px-6 text-[15px] font-medium text-(--color-text) transition active:scale-95"
+      >
+        Відкрити Inbox →
+      </button>
     </div>
+  );
+}
+
+function CheckIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+      <polyline points="20 6 9 17 4 12" />
+    </svg>
   );
 }

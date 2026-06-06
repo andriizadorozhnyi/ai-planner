@@ -86,6 +86,7 @@ export default function Home() {
             tasks={inboxTasks}
             onMoveToToday={moveToToday}
             onDelete={deleteTask}
+            onGoToCapture={() => setTab("capture")}
           />
         )}
         {tab === "today" && (
@@ -94,6 +95,7 @@ export default function Home() {
             onToggle={toggleDone}
             capacityHours={capacityHours}
             onCapacityChange={setCapacityHours}
+            onGoToInbox={() => setTab("inbox")}
           />
         )}
       </section>

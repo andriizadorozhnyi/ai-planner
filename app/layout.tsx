@@ -11,7 +11,7 @@ export const viewport: Viewport = {
   initialScale: 1,
   maximumScale: 1,
   userScalable: false,
-  themeColor: "#0b0b0f",
+  themeColor: "#222631", // SKELAR New Blue 85
 };
 
 export default function RootLayout({
@@ -19,6 +19,10 @@ export default function RootLayout({
 }: Readonly<{ children: React.ReactNode }>) {
   return (
     <html lang="uk">
+      <head>
+        {/* SKELAR primary typeface — Inter via the author's official CDN */}
+        <link rel="stylesheet" href="https://rsms.me/inter/inter.css" />
+      </head>
       <body>{children}</body>
     </html>
   );

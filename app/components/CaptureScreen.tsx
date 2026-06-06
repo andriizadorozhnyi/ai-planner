@@ -8,7 +8,6 @@ interface Props {
   onCapture: (text: string) => Promise<void>;
 }
 
-/** Append two pieces of text with a single space, trimmed. */
 function join(a: string, b: string): string {
   if (!a) return b;
   if (!b) return a;
@@ -21,13 +20,10 @@ export default function CaptureScreen({ onCapture }: Props) {
   const [error, setError] = useState<string | null>(null);
 
   const speech = useSpeechRecognition({ lang: "uk-UA" });
-
-  // Snapshot of what was already in the field when the user started talking.
-  // The full text shown while listening = baseline + speech.transcript.
-  // This avoids any "append per result" logic in the parent — single source of truth.
+  // Snapshot of textarea content when the user started dictating.
+  // Live text shown = baseline + speech.transcript — single source of truth.
   const baselineRef = useRef("");
 
-  // Live-merge dictation into the textarea while listening.
   useEffect(() => {
     if (!speech.listening) return;
     setText(join(baselineRef.current, speech.transcript));
@@ -54,103 +50,97 @@ export default function CaptureScreen({ onCapture }: Props) {
   const onMic = () => {
     if (busy) return;
     if (!speech.supported) {
-      setError(
-        "Цей браузер не підтримує голосовий ввід. Спробуй Chrome або Safari.",
-      );
+      setError("Цей браузер не підтримує голосовий ввід. Спробуй Chrome або Safari.");
       return;
     }
     setError(null);
     if (speech.listening) {
       speech.stop();
-      // What's in the textarea is the merged committed text — keep it as the
-      // new baseline so any further typing/dictating starts from here.
       baselineRef.current = text;
     } else {
-      // Lock in the current text as the baseline; new dictation appends to it.
       baselineRef.current = text;
       speech.start();
     }
   };
 
   const shownError = error ?? speech.error;
+  const hasText = text.trim().length > 0;
 
   return (
-    <div className="flex h-full flex-col px-5 pt-6">
-      <h1 className="text-2xl font-semibold tracking-tight">Що в голові?</h1>
-      <p className="mt-1 text-[15px] text-(--color-muted)">
+    <div className="flex h-full flex-col px-5 pt-8">
+      {/* Hierarchy level 1 — big, tight, brand-tracking */}
+      <h1 className="text-[34px] leading-none font-medium tracking-tight">
+        Що в голові?
+      </h1>
+      <p className="mt-2 text-[15px] leading-snug text-(--color-muted)">
         {speech.listening
           ? "Слухаю… говори, я записую."
           : "Вивантаж усе одним потоком — голосом або текстом."}
       </p>
 
-      {/* Full-bleed capture field. While listening, show live interim text below. */}
-      <div className="mt-4 flex min-h-0 flex-1 flex-col rounded-2xl bg-(--color-surface) focus-within:ring-2 focus-within:ring-(--color-accent)">
+      {/* Capture field — full-bleed, generous padding, live interim below the text */}
+      <div className="mt-5 flex min-h-0 flex-1 flex-col rounded-2xl border border-(--color-border) bg-(--color-surface) transition-colors focus-within:border-white/20">
         <textarea
           value={text}
           onChange={(e) => {
             setText(e.target.value);
-            // If user manually edits, reset baseline so dictation appends to the edited version.
             if (!speech.listening) baselineRef.current = e.target.value;
           }}
           disabled={busy}
           placeholder="Подзвонити в банк, купити воду, дедлайн по звіту в пʼятницю…"
           autoFocus
-          className="min-h-0 flex-1 resize-none rounded-2xl bg-transparent p-4 text-lg leading-relaxed text-(--color-text) placeholder:text-(--color-muted)/60 outline-none disabled:opacity-60"
+          // Textarea fills the wrapper; the wrapper owns the visible focus state.
+          // Suppress :focus-visible here to avoid a doubled red ring.
+          className="min-h-0 flex-1 resize-none rounded-2xl bg-transparent p-5 text-[18px] leading-relaxed text-(--color-text) placeholder:text-(--color-caption) outline-none focus-visible:outline-none disabled:opacity-60"
         />
         {speech.listening && speech.interim && (
-          <p className="px-4 pb-3 text-lg italic leading-relaxed text-(--color-muted)">
+          <p className="px-5 pb-4 text-[18px] italic leading-relaxed text-(--color-muted)">
             {speech.interim}
           </p>
         )}
       </div>
 
       {shownError && (
-        <p className="mt-3 rounded-xl bg-red-500/15 px-4 py-3 text-sm text-red-300">
+        <p
+          role="alert"
+          className="mt-3 rounded-xl border border-(--color-accent)/30 bg-(--color-accent)/10 px-4 py-3 text-sm font-medium text-(--color-text)"
+        >
           {shownError}
         </p>
       )}
 
+      {/* Thumb-zone CTAs: 56px tall, side-by-side, generous gap */}
       <div className="flex items-center gap-3 py-5">
         <button
           type="button"
           aria-label={speech.listening ? "Зупинити запис" : "Диктувати голосом"}
           aria-pressed={speech.listening}
           onClick={onMic}
-          className={`flex h-16 w-16 shrink-0 items-center justify-center rounded-full text-white shadow-lg transition active:scale-95 ${
+          className={`flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl transition active:scale-95 ${
             speech.listening
-              ? "animate-pulse bg-red-500 shadow-red-500/40"
-              : "bg-(--color-accent) shadow-(--color-accent)/30 active:bg-(--color-accent-press)"
+              ? "bg-(--color-accent) text-white"
+              : "border border-(--color-border) bg-(--color-surface) text-(--color-text) active:bg-(--color-surface-2)"
           }`}
         >
-          <MicIcon />
+          <MicIcon active={speech.listening} />
         </button>
 
         <button
           type="button"
           onClick={save}
-          disabled={!text.trim() || busy}
-          className="h-16 flex-1 rounded-full bg-(--color-accent) text-lg font-semibold text-white transition active:scale-[0.98] disabled:opacity-40"
+          disabled={!hasText || busy}
+          className="h-14 flex-1 rounded-2xl bg-(--color-accent) text-[17px] font-medium tracking-tight text-white transition active:scale-[0.98] active:bg-(--color-accent-press) disabled:opacity-30"
         >
-          {busy ? "Розбираю…" : "Розібрати →"}
+          {busy ? "Розбираю…" : "Розібрати"}
         </button>
       </div>
     </div>
   );
 }
 
-function MicIcon() {
+function MicIcon({ active }: { active: boolean }) {
   return (
-    <svg
-      width="28"
-      height="28"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden="true"
-    >
+    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" className={active ? "" : ""}>
       <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z" />
       <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
       <line x1="12" y1="19" x2="12" y2="22" />
