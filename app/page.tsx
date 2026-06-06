@@ -6,7 +6,7 @@ import InboxScreen from "./components/InboxScreen";
 import TabBar from "./components/TabBar";
 import WeekScreen from "./components/WeekScreen";
 import { addDaysISO, todayISO } from "./lib/due";
-import type { Task, TabKey } from "./lib/types";
+import type { BusySlot, Slot, Task, TabKey } from "./lib/types";
 import { useLocalStorage } from "./lib/useLocalStorage";
 
 let counter = 0;
@@ -19,6 +19,10 @@ function newId() {
 export default function Home() {
   const [tab, setTab] = useState<TabKey>("capture");
   const [tasks, setTasks] = useLocalStorage<Task[]>("ai-planner.tasks", []);
+  const [busySlots, setBusySlots] = useLocalStorage<BusySlot[]>(
+    "ai-planner.busySlots",
+    [],
+  );
   // Hours available per day — drives the realism warning. Same value across days.
   const [capacityHours, setCapacityHours] = useLocalStorage<number>(
     "ai-planner.capacityHours",
@@ -54,21 +58,34 @@ export default function Home() {
 
   /** Sends the brain-dump to the AI parser and turns the result into tasks. */
   const handleCapture = async (text: string) => {
+    const today = todayISO();
+    // Hand the model what we already know about today so it doesn't re-create
+    // duplicate busy slots or double-book already-scheduled tasks.
+    const todayContext = {
+      busySlots: busySlots
+        .filter((b) => b.day === today)
+        .map((b) => ({ start: b.start, end: b.end, title: b.title })),
+      scheduledTasks: tasks
+        .filter((t) => t.day === today && t.scheduledSlot && !t.done)
+        .map((t) => ({ title: t.title, slot: t.scheduledSlot! })),
+    };
+
     const res = await fetch("/api/parse", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ text }),
+      body: JSON.stringify({ text, todayContext }),
     });
     const data = await res.json();
     if (!res.ok) throw new Error(data.error ?? "Не вдалося розібрати.");
 
-    const created: Task[] = (data.tasks ?? []).map(
+    const createdTasks: Task[] = (data.tasks ?? []).map(
       (t: {
         title: string;
         priority: Task["priority"];
         estimateMin?: number;
         due?: string | null;
         day?: string | null;
+        scheduledSlot?: Slot | null;
       }) => ({
         id: newId(),
         title: t.title,
@@ -78,23 +95,41 @@ export default function Home() {
           typeof t.estimateMin === "number" ? t.estimateMin : undefined,
         due: typeof t.due === "string" && t.due ? t.due : undefined,
         day: typeof t.day === "string" && t.day ? t.day : undefined,
+        scheduledSlot: t.scheduledSlot ?? undefined,
         done: false,
         createdAt: 0,
       }),
     );
-    if (created.length === 0) return;
-    setTasks((prev) => [...created, ...prev]);
 
-    // Where to land: if any were scheduled to today, jump to Week (on today).
-    // Otherwise show Inbox so the user can dispatch them.
-    const today = todayISO();
-    if (created.some((t) => t.day === today)) {
+    const createdSlots: BusySlot[] = (data.busySlots ?? []).map(
+      (s: { day: string; start: string; end: string; title: string }) => ({
+        id: newId(),
+        day: s.day,
+        start: s.start,
+        end: s.end,
+        title: s.title,
+      }),
+    );
+
+    if (createdTasks.length === 0 && createdSlots.length === 0) return;
+
+    if (createdTasks.length) setTasks((prev) => [...createdTasks, ...prev]);
+    if (createdSlots.length) setBusySlots((prev) => [...createdSlots, ...prev]);
+
+    // Where to land: any new content for today → Week@today. Otherwise Inbox.
+    const anyForToday =
+      createdTasks.some((t) => t.day === today) ||
+      createdSlots.some((s) => s.day === today);
+    if (anyForToday) {
       setSelectedDay(today);
       setTab("week");
     } else {
       setTab("inbox");
     }
   };
+
+  const deleteBusySlot = (id: string) =>
+    setBusySlots((prev) => prev.filter((s) => s.id !== id));
 
   const scheduleTask = (id: string, day: string) =>
     setTasks((prev) =>
@@ -144,9 +179,11 @@ export default function Home() {
         {tab === "week" && (
           <WeekScreen
             tasks={tasks}
+            busySlots={busySlots}
             selectedDay={selectedDay}
             onSelectDay={setSelectedDay}
             onToggle={toggleDone}
+            onDeleteBusySlot={deleteBusySlot}
             onMoveAllToTomorrow={moveAllToTomorrow}
             onCatchUpOverdue={catchUpOverdue}
             capacityHours={capacityHours}

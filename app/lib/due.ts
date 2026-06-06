@@ -1,4 +1,4 @@
-import type { Task } from "./types";
+import type { Slot, Task } from "./types";
 
 /** Today as ISO yyyy-mm-dd (local). */
 export function todayISO(): string {
@@ -61,6 +61,21 @@ const MONTHS_GEN = [
 ];
 export function prettyDate(iso: string): string {
   return `${Number(iso.slice(8, 10))} ${MONTHS_GEN[Number(iso.slice(5, 7)) - 1]}`;
+}
+
+/** "HH:MM" → minutes since midnight. */
+function slotMin(t: string): number {
+  return Number(t.slice(0, 2)) * 60 + Number(t.slice(3, 5));
+}
+
+/** Duration of a slot in minutes (ignores wraparound). */
+export function slotDurationMin(slot: Slot): number {
+  return Math.max(0, slotMin(slot.end) - slotMin(slot.start));
+}
+
+/** Compact "10:30 — 11:00" label. */
+export function formatSlot(slot: Slot): string {
+  return `${slot.start} — ${slot.end}`;
 }
 
 /** True when task has a deadline strictly before today and isn't done. */

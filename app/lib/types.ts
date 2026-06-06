@@ -2,6 +2,20 @@ export type TabKey = "capture" | "inbox" | "week";
 
 export type Priority = "low" | "medium" | "high";
 
+/** Time slot within a day. "HH:MM" 24-hour format. */
+export interface Slot {
+  start: string;
+  end: string;
+}
+
+/** Pre-existing busy time on a given day (meeting, focus-block, lunch). */
+export interface BusySlot extends Slot {
+  id: string;
+  /** ISO yyyy-mm-dd */
+  day: string;
+  title: string;
+}
+
 export interface Task {
   id: string;
   title: string;
@@ -15,6 +29,8 @@ export interface Task {
   due?: string;
   /** Day this task is scheduled on (ISO yyyy-mm-dd). Undefined → lives in Inbox. */
   day?: string;
+  /** AI-recommended time slot within `day`, computed against known busy time. */
+  scheduledSlot?: Slot;
   done: boolean;
   /** @deprecated Pre-Sprint-2 flag — migrated to `day` on load. */
   today?: boolean;

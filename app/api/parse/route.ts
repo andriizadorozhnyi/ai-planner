@@ -16,56 +16,99 @@ function todayISO(): string {
   return `${y}-${m}-${day}`;
 }
 
-// What the AI returns per task. Kept small and gradeable so the model has a
-// clear target; the client maps this onto the full Task shape.
+// "HH:MM" 24-hour. Accepted as-is from the model.
+const TIME_RE = /^([0-1]\d|2[0-3]):[0-5]\d$/;
+const SlotSchema = z.object({
+  start: z.string().regex(TIME_RE),
+  end: z.string().regex(TIME_RE),
+});
+
 const ResultSchema = z.object({
   tasks: z.array(
     z.object({
       title: z.string(),
       priority: z.enum(["low", "medium", "high"]),
-      // Realistic time-to-complete estimate, in minutes.
       estimateMin: z.number().int(),
-      // ISO yyyy-mm-dd deadline if the text mentions one ("до пʼятниці",
-      // "25 червня"); null otherwise. Deadline != scheduled day.
       due: z.string().nullable(),
-      // ISO yyyy-mm-dd day this task should be scheduled on. null = Inbox.
       day: z.string().nullable(),
+      // Suggested time slot when the day has known busy time and there's
+      // enough info to place the task. null when the model isn't confident.
+      scheduledSlot: SlotSchema.nullable(),
+    }),
+  ),
+  // Pre-existing busy time pulled from the brain-dump: meetings, calls,
+  // lunch, focus blocks — anything the user said they're already committed to.
+  busySlots: z.array(
+    z.object({
+      day: z.string(),
+      start: z.string().regex(TIME_RE),
+      end: z.string().regex(TIME_RE),
+      title: z.string(),
     }),
   ),
 });
 
-/** Build the system prompt with the user's "today" so the model can resolve
- *  natural-language dates ("завтра", "в пʼятницю") into concrete ISO dates. */
-function buildSystem(todayISO: string): string {
-  return `Ти — асистент-планувальник дня. Користувач диктує або пише потік думок (українською або іншою мовою). Розбий його на окремі конкретні, дієві задачі.
+/** Existing context that the client knows about — informs the model so it
+ *  doesn't re-create the same busy slot or double-book a planned task. */
+interface DayContext {
+  busySlots: Array<{ start: string; end: string; title: string }>;
+  scheduledTasks: Array<{ title: string; slot: { start: string; end: string } }>;
+}
 
-Сьогоднішня дата: ${todayISO} (ISO yyyy-mm-dd). Використовуй її для розшифрування дат.
+function buildSystem(today: string, ctx: DayContext | null): string {
+  const base = `Ти — асистент-планувальник дня. Користувач диктує або пише потік думок (українською або іншою мовою). Розбий його на окремі конкретні, дієві задачі, і виокрем зайняті часові слоти.
 
-Правила:
-- Кожна задача — короткий формат «дія + об'єкт» (напр. «Подзвонити в банк», «Купити воду»). Прибирай зайві слова.
-- Не вигадуй задач, яких немає в тексті. Не дублюй.
-- priority: "high" — дедлайни, термінове, важливе; "medium" — звичайне; "low" — дрібниці «колись».
-- estimateMin: ціле число хвилин — реалістична оцінка часу (зазвичай 5–240). Дрібна дія ~10–15, дзвінок ~15–30, серйозна робота/звіт ~60–180.
-- due: ISO yyyy-mm-dd дедлайн, якщо явно згадано ("до пʼятниці", "до 15-го", "до кінця тижня"). Інакше null. Це КРАЙНІЙ термін, не обовʼязково день виконання.
-- day: ISO yyyy-mm-dd день, на який задачу варто поставити в розклад.
-  - «сьогодні» / «зараз» / «терміново» або дрібна швидка дія → сьогоднішня дата
-  - «завтра» / «післязавтра» → відповідна дата
-  - конкретний день тижня або календарна дата («у пʼятницю», «25 червня») → ця дата
-  - якщо нічого не вказано і це не дрібна термінова дія → null (потрапить в Inbox)
-- Зберігай мову оригіналу в title.
-- Якщо тексту немає сенсовних задач — поверни порожній масив.`;
+Сьогоднішня дата: ${today} (ISO yyyy-mm-dd). Робочий день — типово 09:00–18:00.
+
+ЗАДАЧІ (tasks[]):
+- title: короткий формат «дія + об'єкт».
+- priority: "high" — дедлайни, термінове; "medium" — звичайне; "low" — «колись».
+- estimateMin: ціле число хвилин (зазвичай 5–240).
+- due: ISO yyyy-mm-dd якщо явно дедлайн ("до пʼятниці", "до 15-го"). Інакше null.
+- day: ISO yyyy-mm-dd день виконання («сьогодні»→${today}, «завтра», «у пʼятницю»). Якщо нічого — null (Inbox).
+- scheduledSlot: {start, end} у форматі "HH:MM" — рекомендований час сьогодні, ВРАХОВУЮЧИ зайняті слоти і вже заплановане. Якщо задача не на сьогодні, або немає достатньо контексту — null.
+
+ЗАЙНЯТІ СЛОТИ (busySlots[]):
+- Якщо у тексті згадано мітинги, дзвінки, обід, тренування, фокус-час, інше зайнятість на конкретний час — додавай у busySlots.
+- start/end: "HH:MM", day: ISO yyyy-mm-dd, title: короткий опис ("Мітинг з командою", "Обід").
+- Не плутай із задачами: «о 10:00 мітинг з командою» — це busySlot, а не task. «о 10:00 подзвонити в банк» — це task (юзер сам має зробити) з scheduledSlot.
+
+ЗАГАЛЬНІ ПРАВИЛА:
+- Не вигадуй того, чого немає в тексті. Не дублюй.
+- Зберігай мову оригіналу в title.`;
+
+  if (!ctx || (ctx.busySlots.length === 0 && ctx.scheduledTasks.length === 0)) {
+    return base;
+  }
+
+  let context = `\n\nКОНТЕКСТ СЬОГОДНІ (вже відомо клієнту, НЕ ДУБЛЮЙ):`;
+  if (ctx.busySlots.length) {
+    context += `\nЗайняті слоти: ${ctx.busySlots
+      .map((b) => `${b.start}–${b.end} ${b.title}`)
+      .join("; ")}`;
+  }
+  if (ctx.scheduledTasks.length) {
+    context += `\nУже заплановано: ${ctx.scheduledTasks
+      .map((t) => `${t.slot.start}–${t.slot.end} ${t.title}`)
+      .join("; ")}`;
+  }
+  context += `\nНові задачі на сьогодні ПЛАНУЙ У ВІЛЬНІ ВІКНА між цими блоками.`;
+  return base + context;
 }
 
 export async function POST(req: Request) {
   let text = "";
+  let ctx: DayContext | null = null;
   try {
-    ({ text } = await req.json());
+    const body = await req.json();
+    text = body.text;
+    if (body.todayContext) ctx = body.todayContext as DayContext;
   } catch {
     return NextResponse.json({ error: "invalid body" }, { status: 400 });
   }
 
   if (!text || !text.trim()) {
-    return NextResponse.json({ tasks: [] });
+    return NextResponse.json({ tasks: [], busySlots: [] });
   }
 
   if (!process.env.ANTHROPIC_API_KEY) {
@@ -80,14 +123,16 @@ export async function POST(req: Request) {
       model: "claude-opus-4-8",
       max_tokens: 4096,
       output_config: {
-        effort: "low", // швидкий парс — інтелекту тут достатньо
+        effort: "low",
         format: zodOutputFormat(ResultSchema),
       },
-      system: buildSystem(todayISO()),
+      system: buildSystem(todayISO(), ctx),
       messages: [{ role: "user", content: text }],
     });
 
-    return NextResponse.json(response.parsed_output ?? { tasks: [] });
+    return NextResponse.json(
+      response.parsed_output ?? { tasks: [], busySlots: [] },
+    );
   } catch (error) {
     if (error instanceof Anthropic.APIError) {
       return NextResponse.json(

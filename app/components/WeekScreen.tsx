@@ -5,23 +5,24 @@ import {
   addDaysISO,
   dayOfMonth,
   formatDue,
+  formatSlot,
   isOverdue,
   prettyDate,
+  slotDurationMin,
   todayISO,
   weekdayLong,
   weekdayShort,
 } from "../lib/due";
-import type { Task } from "../lib/types";
+import type { BusySlot, Task } from "../lib/types";
 
 interface Props {
-  /** All tasks (the screen filters by day itself). */
   tasks: Task[];
+  busySlots: BusySlot[];
   selectedDay: string;
   onSelectDay: (day: string) => void;
   onToggle: (id: string) => void;
-  /** Move all undone tasks from given day → next day. */
+  onDeleteBusySlot: (id: string) => void;
   onMoveAllToTomorrow: (fromDay: string) => void;
-  /** Move ALL undone overdue tasks (any past day) → today. */
   onCatchUpOverdue: () => void;
   capacityHours: number;
   onCapacityChange: (h: number) => void;
@@ -37,9 +38,11 @@ function fmt(min: number): string {
 
 export default function WeekScreen({
   tasks,
+  busySlots,
   selectedDay,
   onSelectDay,
   onToggle,
+  onDeleteBusySlot,
   onMoveAllToTomorrow,
   onCatchUpOverdue,
   capacityHours,
@@ -49,58 +52,68 @@ export default function WeekScreen({
   const isToday = selectedDay === today;
   const isPast = selectedDay < today;
 
-  // 7 days: today + next 6. Rolling week, future-facing.
   const days = useMemo(
     () => Array.from({ length: 7 }, (_, i) => addDaysISO(today, i)),
     [today],
   );
 
-  // Tasks scheduled to the selected day.
   const dayTasks = useMemo(
     () => tasks.filter((t) => t.day === selectedDay),
     [tasks, selectedDay],
   );
+  const daySlots = useMemo(
+    () =>
+      busySlots
+        .filter((s) => s.day === selectedDay)
+        .sort((a, b) => a.start.localeCompare(b.start)),
+    [busySlots, selectedDay],
+  );
 
-  // Per-day load (in minutes) — drives the small bar under each day chip.
+  // Load per day — busy time + task estimates. Drives the strip mini-bars.
   const loadByDay = useMemo(() => {
     const map = new Map<string, number>();
     for (const t of tasks) {
       if (!t.day || t.done) continue;
       map.set(t.day, (map.get(t.day) ?? 0) + (t.estimateMin ?? 0));
     }
+    for (const s of busySlots) {
+      map.set(s.day, (map.get(s.day) ?? 0) + slotDurationMin(s));
+    }
     return map;
-  }, [tasks]);
+  }, [tasks, busySlots]);
 
-  // Overdue across ALL past days — surfaces above the day view, only on today's view.
   const overdueCount = useMemo(
     () => tasks.filter((t) => t.day && t.day < today && !t.done).length,
     [tasks, today],
   );
 
   const doneCount = dayTasks.filter((t) => t.done).length;
-  const plannedMin = dayTasks.reduce((s, t) => s + (t.estimateMin ?? 0), 0);
+  const taskMin = dayTasks.reduce((s, t) => s + (t.estimateMin ?? 0), 0);
+  const busyMin = daySlots.reduce((s, b) => s + slotDurationMin(b), 0);
+  const plannedMin = taskMin + busyMin;
   const capacityMin = capacityHours * 60;
   const fillPct = Math.min(120, Math.round((plannedMin / capacityMin) * 100));
   const overloaded = plannedMin > capacityMin;
   const remainingMin = Math.max(0, capacityMin - plannedMin);
 
-  const setHours = (h: number) => onCapacityChange(Math.min(16, Math.max(1, h)));
+  const setHours = (h: number) =>
+    onCapacityChange(Math.min(16, Math.max(1, h)));
 
   const undoneOnSelectedDay = dayTasks.filter((t) => !t.done).length;
 
   return (
-    <div className="flex h-full flex-col px-5 pt-8">
-      {/* Selected-day headline */}
+    <div className="h-full overflow-y-auto px-5 pt-8 pb-6">
       <h1 className="text-[34px] leading-none font-medium tracking-tight">
         {isToday ? "Сьогодні" : weekdayLong(selectedDay)}
       </h1>
       <p className="mt-2 text-[15px] text-(--color-muted)">
-        {prettyDate(selectedDay)} · {dayTasks.length === 0
+        {prettyDate(selectedDay)} ·{" "}
+        {dayTasks.length === 0 && daySlots.length === 0
           ? "пусто"
           : `${doneCount} з ${dayTasks.length} виконано`}
       </p>
 
-      {/* Day strip — 7 days, horizontally scrollable if needed */}
+      {/* Day strip */}
       <div
         role="tablist"
         aria-label="Дні тижня"
@@ -132,7 +145,6 @@ export default function WeekScreen({
               <span className="text-[17px] font-medium tabular-nums leading-none">
                 {dayOfMonth(d)}
               </span>
-              {/* Tiny load bar at the bottom of the chip */}
               <span
                 aria-hidden="true"
                 className={`mt-0.5 h-0.5 w-7 overflow-hidden rounded-full ${
@@ -151,7 +163,7 @@ export default function WeekScreen({
         })}
       </div>
 
-      {/* Catch-up banner — only on today, only if there's something to catch up */}
+      {/* Catch-up banner — today only */}
       {isToday && overdueCount > 0 && (
         <button
           type="button"
@@ -171,8 +183,8 @@ export default function WeekScreen({
         </button>
       )}
 
-      {/* KPI plate — only on today's view, only when there are tasks */}
-      {isToday && dayTasks.length > 0 && (
+      {/* KPI plate — only on today's view, only when there's anything */}
+      {isToday && (dayTasks.length > 0 || daySlots.length > 0) && (
         <section
           className={`mt-4 rounded-2xl border p-5 transition ${
             overloaded
@@ -225,19 +237,59 @@ export default function WeekScreen({
               style={{ width: `${Math.min(100, fillPct)}%` }}
             />
           </div>
+          {/* Breakdown — busy vs task time */}
+          {busyMin > 0 && (
+            <p className="mt-3 text-[13px] text-(--color-muted) tabular-nums">
+              {fmt(busyMin)} зустрічі · {fmt(taskMin)} задачі
+            </p>
+          )}
           {overloaded && (
-            <p className="mt-3 text-[13px] font-medium text-(--color-accent)">
+            <p className="mt-2 text-[13px] font-medium text-(--color-accent)">
               Перенеси частину на інший день або прибери дрібниці.
             </p>
           )}
         </section>
       )}
 
-      {/* Task list for the selected day */}
+      {/* Busy slots (meetings) — calm grey cards above the task list */}
+      {daySlots.length > 0 && (
+        <section className="mt-4" aria-label="Зайняті слоти">
+          <ul className="space-y-2">
+            {daySlots.map((s) => (
+              <li
+                key={s.id}
+                className="flex items-center gap-3 rounded-2xl border border-(--color-border) bg-(--color-bg-alt) px-4 py-3"
+              >
+                <span aria-hidden="true" className="text-[15px]">📅</span>
+                <div className="min-w-0 flex-1">
+                  <div className="text-[15px] leading-snug text-(--color-text)">
+                    {s.title}
+                  </div>
+                  <div className="text-[12px] tabular-nums text-(--color-muted)">
+                    {formatSlot(s)} · {fmt(slotDurationMin(s))}
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  aria-label="Видалити слот"
+                  onClick={() => onDeleteBusySlot(s.id)}
+                  className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-(--color-border) text-(--color-muted) transition active:scale-95"
+                >
+                  <CloseIcon />
+                </button>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
+
+      {/* Task list */}
       {dayTasks.length === 0 ? (
-        <EmptyDay isToday={isToday} isPast={isPast} />
+        daySlots.length === 0 && (
+          <EmptyDay isToday={isToday} isPast={isPast} />
+        )
       ) : (
-        <ul className="mt-4 flex-1 space-y-2 overflow-y-auto pb-4">
+        <ul className="mt-4 space-y-2">
           {dayTasks.map((task) => {
             const overdue = isOverdue(task, today);
             return (
@@ -267,16 +319,26 @@ export default function WeekScreen({
                     >
                       {task.title}
                     </div>
-                    {task.due && !task.done && (
-                      <div
-                        className={`mt-0.5 text-[12px] tabular-nums ${
-                          overdue
-                            ? "font-medium text-(--color-accent)"
-                            : "text-(--color-caption)"
-                        }`}
-                      >
-                        {overdue ? "⚠ " : "📅 "}
-                        {formatDue(task.due, today)}
+                    {/* Slot is a primary signal — render in muted-but-tabular row */}
+                    {(task.scheduledSlot || (task.due && !task.done)) && (
+                      <div className="mt-0.5 flex items-center gap-3 text-[12px] tabular-nums">
+                        {task.scheduledSlot && !task.done && (
+                          <span className="text-(--color-muted)">
+                            🕒 {formatSlot(task.scheduledSlot)}
+                          </span>
+                        )}
+                        {task.due && !task.done && (
+                          <span
+                            className={
+                              overdue
+                                ? "font-medium text-(--color-accent)"
+                                : "text-(--color-caption)"
+                            }
+                          >
+                            {overdue ? "⚠ " : "📅 "}
+                            {formatDue(task.due, today)}
+                          </span>
+                        )}
                       </div>
                     )}
                   </div>
@@ -292,12 +354,11 @@ export default function WeekScreen({
         </ul>
       )}
 
-      {/* Bulk "move all undone to tomorrow" — bottom action, only on today's view */}
       {isToday && undoneOnSelectedDay > 0 && (
         <button
           type="button"
           onClick={() => onMoveAllToTomorrow(selectedDay)}
-          className="mb-4 mt-2 h-12 shrink-0 rounded-2xl border border-(--color-border) bg-(--color-surface) text-[14px] font-medium text-(--color-muted) transition active:scale-[0.98]"
+          className="mt-4 h-12 w-full rounded-2xl border border-(--color-border) bg-(--color-surface) text-[14px] font-medium text-(--color-muted) transition active:scale-[0.98]"
         >
           Перенести невиконане на завтра →
         </button>
@@ -313,7 +374,7 @@ function EmptyDay({ isToday, isPast }: { isToday: boolean; isPast: boolean }) {
       ? "Цей день був порожній."
       : "День ще не заплановано.";
   const sub = isToday
-    ? "Перенеси задачі з Inbox — і день візьме форму."
+    ? "Перенеси задачі з Inbox або скажи AI про мітинги і задачі дня."
     : isPast
       ? "Якщо щось було — воно вже не вплине на план."
       : "Признач задачі з Inbox на цей день.";
@@ -336,6 +397,13 @@ function CheckIcon() {
   return (
     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
       <polyline points="20 6 9 17 4 12" />
+    </svg>
+  );
+}
+function CloseIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M18 6 6 18M6 6l12 12" />
     </svg>
   );
 }

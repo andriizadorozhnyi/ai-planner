@@ -66,7 +66,7 @@ export default function InboxScreen({
   ];
 
   return (
-    <div className="flex h-full flex-col px-5 pt-8">
+    <div className="flex h-full flex-col overflow-y-auto px-5 pt-8 pb-6">
       <h1 className="text-[34px] leading-none font-medium tracking-tight">Inbox</h1>
       <p className="mt-2 text-[15px] text-(--color-muted)">
         {tasks.length === 0
@@ -90,7 +90,7 @@ export default function InboxScreen({
           {visible.length === 0 ? (
             <FilteredEmpty filter={filter} onReset={() => setFilter("all")} />
           ) : (
-            <ul className="mt-4 flex-1 space-y-2 overflow-y-auto pb-4">
+            <ul className="mt-4 space-y-2">
               {visible.map((task) => {
                 const overdue = isOverdue(task, today);
                 return (
