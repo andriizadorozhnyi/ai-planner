@@ -5,10 +5,35 @@ import type { Task } from "../lib/types";
 interface Props {
   tasks: Task[];
   onToggle: (id: string) => void;
+  capacityHours: number;
+  onCapacityChange: (hours: number) => void;
 }
 
-export default function TodayScreen({ tasks, onToggle }: Props) {
+/** Minutes → compact "Хг Yхв". */
+function fmt(min: number): string {
+  const h = Math.floor(min / 60);
+  const m = Math.round(min % 60);
+  if (h && m) return `${h} год ${m} хв`;
+  if (h) return `${h} год`;
+  return `${m} хв`;
+}
+
+export default function TodayScreen({
+  tasks,
+  onToggle,
+  capacityHours,
+  onCapacityChange,
+}: Props) {
   const doneCount = tasks.filter((t) => t.done).length;
+
+  // Planned load = sum of estimates across today's tasks (missing → 0).
+  const plannedMin = tasks.reduce((sum, t) => sum + (t.estimateMin ?? 0), 0);
+  const capacityMin = capacityHours * 60;
+  const overloaded = plannedMin > capacityMin;
+  const remainingMin = capacityMin - plannedMin;
+
+  const setHours = (h: number) =>
+    onCapacityChange(Math.min(16, Math.max(1, h)));
 
   return (
     <div className="flex h-full flex-col px-5 pt-6">
@@ -16,8 +41,54 @@ export default function TodayScreen({ tasks, onToggle }: Props) {
       <p className="mt-1 text-[15px] text-(--color-muted)">
         {tasks.length === 0
           ? "Чекліст на день."
-          : `${doneCount} з ${tasks.length} виконано.`}
+          : `${doneCount} з ${tasks.length} виконано${
+              plannedMin > 0 ? ` · заплановано ≈ ${fmt(plannedMin)}` : ""
+            }`}
       </p>
+
+      {tasks.length > 0 && (
+        <>
+          {/* Capacity stepper */}
+          <div className="mt-4 flex items-center justify-between rounded-2xl bg-(--color-surface) px-4 py-3">
+            <span className="text-[15px] text-(--color-muted)">Ємність дня</span>
+            <div className="flex items-center gap-3">
+              <button
+                type="button"
+                aria-label="Менше годин"
+                onClick={() => setHours(capacityHours - 1)}
+                className="flex h-9 w-9 items-center justify-center rounded-full bg-(--color-surface-2) text-xl leading-none text-(--color-text) transition active:scale-90"
+              >
+                −
+              </button>
+              <span className="min-w-16 text-center text-[15px] font-semibold tabular-nums">
+                {capacityHours} год
+              </span>
+              <button
+                type="button"
+                aria-label="Більше годин"
+                onClick={() => setHours(capacityHours + 1)}
+                className="flex h-9 w-9 items-center justify-center rounded-full bg-(--color-surface-2) text-xl leading-none text-(--color-text) transition active:scale-90"
+              >
+                +
+              </button>
+            </div>
+          </div>
+
+          {/* Realism banner */}
+          {overloaded ? (
+            <p className="mt-3 rounded-xl bg-red-500/15 px-4 py-3 text-sm text-red-300">
+              ⚠️ Задач на ≈ {fmt(plannedMin)}, а в дні {capacityHours} год.
+              Перенеси частину або прибери дрібниці.
+            </p>
+          ) : (
+            plannedMin > 0 && (
+              <p className="mt-3 rounded-xl bg-(--color-surface) px-4 py-3 text-sm text-(--color-muted)">
+                👍 Влізає. Вільно ще ≈ {fmt(remainingMin)}.
+              </p>
+            )
+          )}
+        </>
+      )}
 
       {tasks.length === 0 ? (
         <EmptyState />
@@ -48,6 +119,11 @@ export default function TodayScreen({ tasks, onToggle }: Props) {
                 >
                   {task.title}
                 </span>
+                {task.estimateMin != null && (
+                  <span className="shrink-0 text-sm tabular-nums text-(--color-muted)">
+                    {fmt(task.estimateMin)}
+                  </span>
+                )}
               </button>
             </li>
           ))}

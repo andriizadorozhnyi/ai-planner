@@ -18,6 +18,11 @@ function newId() {
 export default function Home() {
   const [tab, setTab] = useState<TabKey>("capture");
   const [tasks, setTasks] = useLocalStorage<Task[]>("ai-planner.tasks", []);
+  // Hours available for tasks today — drives the realism warning.
+  const [capacityHours, setCapacityHours] = useLocalStorage<number>(
+    "ai-planner.capacityHours",
+    8,
+  );
 
   const inboxTasks = useMemo(() => tasks.filter((t) => !t.today), [tasks]);
   const todayTasks = useMemo(() => tasks.filter((t) => t.today), [tasks]);
@@ -36,11 +41,18 @@ export default function Home() {
     if (!res.ok) throw new Error(data.error ?? "Не вдалося розібрати.");
 
     const created: Task[] = (data.tasks ?? []).map(
-      (t: { title: string; priority: Task["priority"]; today: boolean }) => ({
+      (t: {
+        title: string;
+        priority: Task["priority"];
+        estimateMin?: number;
+        today: boolean;
+      }) => ({
         id: newId(),
         title: t.title,
         source: text,
         priority: t.priority,
+        estimateMin:
+          typeof t.estimateMin === "number" ? t.estimateMin : undefined,
         done: false,
         today: Boolean(t.today),
         createdAt: 0,
@@ -77,7 +89,12 @@ export default function Home() {
           />
         )}
         {tab === "today" && (
-          <TodayScreen tasks={todayTasks} onToggle={toggleDone} />
+          <TodayScreen
+            tasks={todayTasks}
+            onToggle={toggleDone}
+            capacityHours={capacityHours}
+            onCapacityChange={setCapacityHours}
+          />
         )}
       </section>
 

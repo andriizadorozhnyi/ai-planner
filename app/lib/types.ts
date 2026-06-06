@@ -9,6 +9,8 @@ export interface Task {
   source?: string;
   /** Priority assigned by the AI parser. */
   priority?: Priority;
+  /** Estimated time to complete, in minutes (assigned by the AI parser). */
+  estimateMin?: number;
   done: boolean;
   /** Marks the task as scheduled for the Today checklist. */
   today: boolean;
