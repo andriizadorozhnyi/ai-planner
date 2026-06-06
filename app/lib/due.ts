@@ -9,6 +9,60 @@ export function todayISO(): string {
   return `${y}-${m}-${day}`;
 }
 
+const WEEKDAYS_SHORT = ["нд", "пн", "вт", "ср", "чт", "пт", "сб"];
+const WEEKDAYS_LONG = [
+  "Неділя",
+  "Понеділок",
+  "Вівторок",
+  "Середа",
+  "Четвер",
+  "Пʼятниця",
+  "Субота",
+];
+
+/** Add N days to an ISO date string, returning a new ISO date string. */
+export function addDaysISO(iso: string, n: number): string {
+  const d = new Date(`${iso}T00:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + n);
+  return d.toISOString().slice(0, 10);
+}
+
+/** "пн", "вт"… for a given ISO date. */
+export function weekdayShort(iso: string): string {
+  const d = new Date(`${iso}T00:00:00Z`);
+  return WEEKDAYS_SHORT[d.getUTCDay()];
+}
+
+/** Long Ukrainian weekday name. */
+export function weekdayLong(iso: string): string {
+  const d = new Date(`${iso}T00:00:00Z`);
+  return WEEKDAYS_LONG[d.getUTCDay()];
+}
+
+/** "15" (day-of-month) for an ISO date. */
+export function dayOfMonth(iso: string): string {
+  return iso.slice(8, 10);
+}
+
+/** "15 червня" — Ukrainian dd month for the headline subtitle. */
+const MONTHS_GEN = [
+  "січня",
+  "лютого",
+  "березня",
+  "квітня",
+  "травня",
+  "червня",
+  "липня",
+  "серпня",
+  "вересня",
+  "жовтня",
+  "листопада",
+  "грудня",
+];
+export function prettyDate(iso: string): string {
+  return `${Number(iso.slice(8, 10))} ${MONTHS_GEN[Number(iso.slice(5, 7)) - 1]}`;
+}
+
 /** True when task has a deadline strictly before today and isn't done. */
 export function isOverdue(task: Task, today = todayISO()): boolean {
   return Boolean(task.due) && !task.done && task.due! < today;

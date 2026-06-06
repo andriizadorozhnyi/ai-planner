@@ -25,11 +25,11 @@ const ResultSchema = z.object({
       priority: z.enum(["low", "medium", "high"]),
       // Realistic time-to-complete estimate, in minutes.
       estimateMin: z.number().int(),
-      // ISO yyyy-mm-dd deadline if the text mentions one ("завтра", "в пʼятницю",
-      // "до 15-го", "25 червня"); null otherwise.
+      // ISO yyyy-mm-dd deadline if the text mentions one ("до пʼятниці",
+      // "25 червня"); null otherwise. Deadline != scheduled day.
       due: z.string().nullable(),
-      // Whether this belongs on today's checklist vs. sitting in the inbox.
-      today: z.boolean(),
+      // ISO yyyy-mm-dd day this task should be scheduled on. null = Inbox.
+      day: z.string().nullable(),
     }),
   ),
 });
@@ -46,8 +46,12 @@ function buildSystem(todayISO: string): string {
 - Не вигадуй задач, яких немає в тексті. Не дублюй.
 - priority: "high" — дедлайни, термінове, важливе; "medium" — звичайне; "low" — дрібниці «колись».
 - estimateMin: ціле число хвилин — реалістична оцінка часу (зазвичай 5–240). Дрібна дія ~10–15, дзвінок ~15–30, серйозна робота/звіт ~60–180.
-- due: ISO yyyy-mm-dd, якщо у тексті явно згадано дату/дедлайн ("сьогодні", "завтра", "післязавтра", "у пʼятницю", "до 15-го", "25 червня", "до кінця тижня"). Розшифровуй відносно сьогоднішньої дати. Якщо точної дати немає — null.
-- today: true, якщо due ≤ сьогодні, або задача явно термінова ("зараз", "терміново"), або це дрібна швидка дія. Інакше false.
+- due: ISO yyyy-mm-dd дедлайн, якщо явно згадано ("до пʼятниці", "до 15-го", "до кінця тижня"). Інакше null. Це КРАЙНІЙ термін, не обовʼязково день виконання.
+- day: ISO yyyy-mm-dd день, на який задачу варто поставити в розклад.
+  - «сьогодні» / «зараз» / «терміново» або дрібна швидка дія → сьогоднішня дата
+  - «завтра» / «післязавтра» → відповідна дата
+  - конкретний день тижня або календарна дата («у пʼятницю», «25 червня») → ця дата
+  - якщо нічого не вказано і це не дрібна термінова дія → null (потрапить в Inbox)
 - Зберігай мову оригіналу в title.
 - Якщо тексту немає сенсовних задач — поверни порожній масив.`;
 }

@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { formatDue, hasDue, isOverdue, todayISO } from "../lib/due";
+import { addDaysISO, formatDue, hasDue, isOverdue, todayISO } from "../lib/due";
 import type { Priority, Task } from "../lib/types";
 import FilterChips, { type FilterChip } from "./FilterChips";
 
@@ -15,21 +15,21 @@ type FilterKey = "all" | "high" | "due" | "overdue";
 
 interface Props {
   tasks: Task[];
-  onMoveToToday: (id: string) => void;
+  /** Schedule a task to a specific day (ISO yyyy-mm-dd). */
+  onSchedule: (id: string, day: string) => void;
   onDelete: (id: string) => void;
   onGoToCapture: () => void;
 }
 
 export default function InboxScreen({
   tasks,
-  onMoveToToday,
+  onSchedule,
   onDelete,
   onGoToCapture,
 }: Props) {
-  const [filter, setFilter] = useState<FilterKey>("all");
-
-  // Today is computed once per render; good enough for a single-user mobile app.
   const today = todayISO();
+  const tomorrow = addDaysISO(today, 1);
+  const [filter, setFilter] = useState<FilterKey>("all");
 
   // Counts power the chip badges. Compute over the FULL list so the user can
   // see "there are 3 overdue items" even from inside another filter.
@@ -96,47 +96,60 @@ export default function InboxScreen({
                 return (
                   <li
                     key={task.id}
-                    className="flex items-center gap-3 rounded-2xl border border-(--color-border) bg-(--color-surface) p-3 pl-4"
+                    className="rounded-2xl border border-(--color-border) bg-(--color-surface) p-4"
                   >
-                    <span
-                      className={`h-2.5 w-2.5 shrink-0 rounded-full ${PRIORITY_COLOR[task.priority ?? "low"]}`}
-                      aria-label={`Пріоритет: ${task.priority ?? "low"}`}
-                    />
-                    <div className="min-w-0 flex-1">
-                      <div className="text-[17px] leading-snug">{task.title}</div>
-                      <div className="mt-0.5 flex items-center gap-3 text-[12px] text-(--color-caption)">
-                        {task.estimateMin != null && (
-                          <span className="tabular-nums">{fmt(task.estimateMin)}</span>
-                        )}
-                        {task.due && (
-                          <span
-                            className={`tabular-nums ${
-                              overdue
-                                ? "font-medium text-(--color-accent)"
-                                : "text-(--color-muted)"
-                            }`}
-                          >
-                            {overdue ? "⚠ " : "📅 "}
-                            {formatDue(task.due, today)}
-                          </span>
-                        )}
+                    {/* Row 1: text + estimate */}
+                    <div className="flex items-start gap-3">
+                      <span
+                        className={`mt-1.5 h-2.5 w-2.5 shrink-0 rounded-full ${PRIORITY_COLOR[task.priority ?? "low"]}`}
+                        aria-label={`Пріоритет: ${task.priority ?? "low"}`}
+                      />
+                      <div className="min-w-0 flex-1">
+                        <div className="text-[17px] leading-snug">{task.title}</div>
+                        <div className="mt-1 flex items-center gap-3 text-[12px] text-(--color-caption)">
+                          {task.estimateMin != null && (
+                            <span className="tabular-nums">{fmt(task.estimateMin)}</span>
+                          )}
+                          {task.due && (
+                            <span
+                              className={`tabular-nums ${
+                                overdue
+                                  ? "font-medium text-(--color-accent)"
+                                  : "text-(--color-muted)"
+                              }`}
+                            >
+                              {overdue ? "⚠ " : "📅 "}
+                              {formatDue(task.due, today)}
+                            </span>
+                          )}
+                        </div>
                       </div>
                     </div>
-                    <button
-                      type="button"
-                      onClick={() => onMoveToToday(task.id)}
-                      className="h-11 shrink-0 rounded-xl bg-(--color-accent) px-4 text-[14px] font-medium text-white transition active:scale-95 active:bg-(--color-accent-press)"
-                    >
-                      Сьогодні
-                    </button>
-                    <button
-                      type="button"
-                      aria-label="Видалити"
-                      onClick={() => onDelete(task.id)}
-                      className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-(--color-border) text-(--color-muted) transition active:scale-95"
-                    >
-                      <CloseIcon />
-                    </button>
+                    {/* Row 2: actions */}
+                    <div className="mt-3 flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => onSchedule(task.id, today)}
+                        className="h-11 flex-1 rounded-xl bg-(--color-accent) text-[14px] font-medium text-white transition active:scale-95 active:bg-(--color-accent-press)"
+                      >
+                        Сьогодні
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => onSchedule(task.id, tomorrow)}
+                        className="h-11 flex-1 rounded-xl border border-(--color-border) bg-(--color-bg-alt) text-[14px] font-medium text-(--color-text) transition active:scale-95"
+                      >
+                        Завтра
+                      </button>
+                      <button
+                        type="button"
+                        aria-label="Видалити"
+                        onClick={() => onDelete(task.id)}
+                        className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-(--color-border) text-(--color-muted) transition active:scale-95"
+                      >
+                        <CloseIcon />
+                      </button>
+                    </div>
                   </li>
                 );
               })}

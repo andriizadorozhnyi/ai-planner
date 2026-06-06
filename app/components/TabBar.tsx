@@ -11,7 +11,7 @@ interface Props {
 const TABS: { key: TabKey; label: string; icon: React.ReactNode }[] = [
   { key: "capture", label: "Capture", icon: <CaptureIcon /> },
   { key: "inbox", label: "Inbox", icon: <InboxIcon /> },
-  { key: "today", label: "Сьогодні", icon: <TodayIcon /> },
+  { key: "week", label: "Тиждень", icon: <WeekIcon /> },
 ];
 
 /**
@@ -87,11 +87,11 @@ function InboxIcon() {
     </svg>
   );
 }
-function TodayIcon() {
+function WeekIcon() {
   return (
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <circle cx="12" cy="12" r="4" />
-      <path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41" />
+      <rect x="3" y="5" width="18" height="16" rx="2" />
+      <path d="M3 9h18M8 3v4M16 3v4" />
     </svg>
   );
 }

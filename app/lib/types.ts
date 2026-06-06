@@ -1,4 +1,4 @@
-export type TabKey = "capture" | "inbox" | "today";
+export type TabKey = "capture" | "inbox" | "week";
 
 export type Priority = "low" | "medium" | "high";
 
@@ -11,10 +11,12 @@ export interface Task {
   priority?: Priority;
   /** Estimated time to complete, in minutes (assigned by the AI parser). */
   estimateMin?: number;
-  /** Deadline as ISO yyyy-mm-dd, if any (assigned by the AI parser). */
+  /** Deadline (ISO yyyy-mm-dd), if any (assigned by the AI parser). */
   due?: string;
+  /** Day this task is scheduled on (ISO yyyy-mm-dd). Undefined → lives in Inbox. */
+  day?: string;
   done: boolean;
-  /** Marks the task as scheduled for the Today checklist. */
-  today: boolean;
+  /** @deprecated Pre-Sprint-2 flag — migrated to `day` on load. */
+  today?: boolean;
   createdAt: number;
 }
